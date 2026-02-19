@@ -1,0 +1,81 @@
+Metadata-Version: 2.4
+Name: monitorch
+Version: 0.1.0
+Summary: Tensor flow visualization for PyTorch debugging.
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.0
+Requires-Dist: matplotlib>=3.7
+Requires-Dist: numpy>=1.24
+
+# monitorch
+
+`monitorch` 是一个面向 PyTorch 的轻量可视化调试工具：开启后自动捕获 Tensor 变化，并把连续操作绘制成带箭头的流程图。
+
+## 安装
+
+```bash
+pip install -e .
+```
+
+## 快速开始
+
+### Notebook 风格
+
+```python
+import torch
+import monitorch
+
+monitorch.on(show=True, save=False)
+
+x = torch.randn(8, 8)
+w = torch.randn(8, 8)
+y = x @ w
+z = torch.relu(y)
+
+monitorch.off()
+```
+
+### VS Code 风格（按行范围监测）
+
+```python
+import torch
+import monitorch
+
+monitorch.lines(10, 30)  # 只监测当前文件的第 10-30 行
+monitorch.on(show=False, save=True)
+
+a = torch.randn(16, 16)
+b = a.softmax(dim=-1)
+c = b[:, :8]
+
+monitorch.off(filename="block.png")
+```
+
+### 自动推断传参 + 显式传参
+
+```python
+import torch
+import monitorch
+
+def block(x, scale: float, bias):
+    y = x * scale
+    return y + bias
+
+monitorch.args(scale=0.5, bias=torch.ones(8, 8))
+monitorch.on(show=False, save=True)
+out = monitorch.run(block, x=torch.randn(8, 8))
+monitorch.off(filename="inferred.png")
+```
+
+## 设计亮点（当前版本）
+
+- 连续 Tensor 变化会出现在同一张图上，按时间顺序用箭头连接。
+- `monitorch.run()` 会从显式输入、`monitorch.args(...)`、调用上下文中按优先级补全缺失参数。
+- 高维 Tensor 会自动抽样显示代表性切片，降低额外开销。
+- `on/off` 开关可直接嵌入日常训练代码，作为轻量级可视化调试。
+
+## 说明
+
+- 当前追踪粒度是“代码行前后 Tensor 变化”，不是 ATen 原语级别。
+- 默认最多保留最近 12 个变化节点，可通过 `on(max_nodes=...)` 调整。
