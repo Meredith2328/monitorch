@@ -3,6 +3,8 @@
 `monitorch` is a lightweight PyTorch debugging helper.
 It captures Tensor changes while your code runs and renders them as one flow chart with arrows.
 
+![combo_lines_flush_final](C:\desktoppp\moni\monitorch_outputs\combo_lines_flush_final.png)
+
 ## Highlights
 
 - Graph view: Tensor updates are rendered as table nodes, and arrows connect real data dependencies (for example, `x,w -> y`).
