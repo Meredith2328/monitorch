@@ -28,6 +28,7 @@ class FrameState:
     snapshot: FrameSnapshot
     prev_lineno: int
     prev_code: str
+    emitted_names: set[str] = field(default_factory=set)
 
 
 class MonitorRuntime:
@@ -128,12 +129,25 @@ class MonitorRuntime:
                 provided = Path(filename)
                 save_path = provided if provided.is_absolute() else self._save_dir / provided
 
-        output = render_chain(
-            self._nodes,
-            show=should_show,
-            save_path=save_path,
-            title="monitorch Tensor Flow",
-        )
+        paused = False
+        if self.enabled:
+            # Rendering triggers many Python-level calls; pause tracing to avoid massive slowdown.
+            self.enabled = False
+            self._uninstall_trace()
+            paused = True
+
+        try:
+            output = render_chain(
+                self._nodes,
+                show=should_show,
+                save_path=save_path,
+                title="monitorch Tensor Flow",
+            )
+        finally:
+            if paused:
+                self._install_trace()
+                self.enabled = True
+                self._bootstrap_current_frame()
 
         if clear:
             self._nodes.clear()
@@ -258,6 +272,7 @@ class MonitorRuntime:
                 code=state.prev_code,
                 before=state.snapshot,
                 after=current,
+                state=state,
             )
             state.snapshot = current
             state.prev_lineno = frame.f_lineno
@@ -272,6 +287,7 @@ class MonitorRuntime:
                 code=state.prev_code,
                 before=state.snapshot,
                 after=current,
+                state=state,
             )
             self._frame_states.pop(id(frame), None)
             return self._trace
@@ -286,6 +302,7 @@ class MonitorRuntime:
         code: str,
         before: FrameSnapshot,
         after: FrameSnapshot,
+        state: FrameState,
     ) -> None:
         if lineno <= 0:
             return
@@ -304,6 +321,7 @@ class MonitorRuntime:
         dependencies_by_target = _line_target_dependencies(code, before_tensor_names)
         line_reads = _line_tensor_reads(code, before_tensor_names)
 
+        changed_entries: List[Tuple[str, torch.Tensor, Tuple[str, ...]]] = []
         for name in sorted(changed):
             tensor = after.tensors[name]
             dependencies = dependencies_by_target.get(name)
@@ -314,6 +332,26 @@ class MonitorRuntime:
                     dependencies = (name,)
                 else:
                     dependencies = ()
+            changed_entries.append((name, tensor, tuple(dependencies)))
+
+        source_candidates: List[str] = []
+        for _, _, dependencies in changed_entries:
+            for dep in dependencies:
+                if dep in after.tensors and dep not in changed and dep not in state.emitted_names:
+                    source_candidates.append(dep)
+
+        for source_name in _unique_strs(source_candidates):
+            self._append_node(
+                name=source_name,
+                filename=frame.f_code.co_filename,
+                lineno=lineno,
+                code=f"{source_name} (source)",
+                tensor=after.tensors[source_name],
+                dependencies=(),
+            )
+            state.emitted_names.add(source_name)
+
+        for name, tensor, dependencies in changed_entries:
             self._append_node(
                 name=name,
                 filename=frame.f_code.co_filename,
@@ -322,6 +360,7 @@ class MonitorRuntime:
                 tensor=tensor,
                 dependencies=dependencies,
             )
+            state.emitted_names.add(name)
 
     def _append_node(
         self,

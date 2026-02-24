@@ -259,18 +259,26 @@ def _layout_nodes(
 
     num_levels = max_level + 1
     if num_levels <= 2:
-        gap_x = 0.10
+        gap_x = 0.12
         width_cap = 0.34
     elif num_levels == 3:
-        gap_x = 0.07
+        gap_x = 0.09
         width_cap = 0.27
-    else:
+    elif num_levels <= 5:
         gap_x = 0.06
-        width_cap = 0.22
+        width_cap = 0.21
+    else:
+        gap_x = 0.04
+        width_cap = 0.16
 
-    available_w = right - left - gap_x * (num_levels - 1)
-    box_width = min(width_cap, available_w / max(1, num_levels))
-    box_width = max(0.18, box_width)
+    usable_w = right - left
+    available_w = usable_w - gap_x * max(0, num_levels - 1)
+    if available_w <= 0:
+        gap_x = 0.01
+        available_w = usable_w - gap_x * max(0, num_levels - 1)
+    max_box_width = available_w / max(1, num_levels)
+    box_width = min(width_cap, max_box_width)
+    box_width = min(max_box_width, max(0.07, box_width))
 
     if max_rows <= 1:
         box_height = min(0.40, (top - bottom) * 0.70)
@@ -280,7 +288,9 @@ def _layout_nodes(
     if num_levels == 1:
         x_positions = np.array([(left + right) / 2.0], dtype=float)
     else:
-        x_positions = np.linspace(left + box_width / 2.0, right - box_width / 2.0, num=num_levels)
+        total_w = num_levels * box_width + (num_levels - 1) * gap_x
+        start = 0.5 - total_w / 2.0 + box_width / 2.0
+        x_positions = np.array([start + i * (box_width + gap_x) for i in range(num_levels)], dtype=float)
     positions = {}
 
     for level in range(num_levels):
@@ -359,8 +369,10 @@ def _draw_edges(
     for src, dst in edges:
         src_x, src_y = positions[src]
         dst_x, dst_y = positions[dst]
-        start = (src_x + box_width / 2.0, src_y)
-        end = (dst_x - box_width / 2.0, dst_y)
+        direction = 1.0 if dst_x >= src_x else -1.0
+        margin = 0.008
+        start = (src_x + direction * (box_width / 2.0 + margin), src_y)
+        end = (dst_x - direction * (box_width / 2.0 + margin), dst_y)
         delta_y = dst_y - src_y
         curvature = 0.0 if abs(delta_y) < 0.05 else 0.18 * np.sign(delta_y)
 
@@ -374,11 +386,11 @@ def _draw_edges(
                 "arrowstyle": "-|>",
                 "lw": 1.8,
                 "color": "#334155",
-                "shrinkA": 8,
-                "shrinkB": 8,
+                "shrinkA": 0,
+                "shrinkB": 0,
                 "connectionstyle": f"arc3,rad={curvature}",
             },
-            zorder=1,
+            zorder=10,
         )
 
 

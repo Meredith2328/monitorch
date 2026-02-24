@@ -67,6 +67,13 @@ out = monitorch.run(block, x=torch.randn(8, 8))
 monitorch.off(filename="inferred.png")
 ```
 
+## More Demos
+
+- `python examples/feature_combo_demo.py`
+  - Covers combinations of `lines + on/off + flush`, `watch`, and `args + run`.
+- `python examples/simple_nn_demo.py`
+  - Uses a tiny MLP and generates both forward-flow and one-step training-flow visualizations.
+
 ## API
 
 - `monitorch.on(...)`: enable tracing.
